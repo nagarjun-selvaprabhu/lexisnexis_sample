@@ -117,5 +117,5 @@ jobs:
         run: |
           # optional: show which token is set (masked by GitHub)
           echo "Deploying to Railway..."
-          railway up --service your-service-name --ci
+          railway up --service lexisnexis_sample --ci
 
