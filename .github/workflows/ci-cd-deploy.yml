@@ -59,9 +59,9 @@ jobs:
         working-directory: ${{ env.FRONTEND_DIR }}
         run: npm ci
 
-      - name: Run Angular unit tests (Headless)
+      - name: Run Angular unit tests
         working-directory: ${{ env.FRONTEND_DIR }}
-        run: npm test -- --watch=false --browsers=ChromeHeadless
+        run: npm test -- --watch=false
 
   build-and-deploy:
     name: Build + Deploy
