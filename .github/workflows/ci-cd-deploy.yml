@@ -109,12 +109,13 @@ jobs:
         run: mvn -B -DskipTests package
 
       - name: Install Railway CLI
-        run: curl -fsSL $RAILWAY_CLI_INSTALL | sh
+        run: curl -fsSL https://railway.app/install.sh | sh
 
-      - name: Login to Railway
+      - name: Deploy to Railway (non-interactive)
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway login
+        run: |
+          # optional: show which token is set (masked by GitHub)
+          echo "Deploying to Railway..."
+          railway up --service your-service-name --ci
 
-      - name: Deploy to Railway
-        run: railway up --ci
