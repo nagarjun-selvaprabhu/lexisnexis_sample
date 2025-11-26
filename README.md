@@ -11,3 +11,4 @@ The workflow includes running tests for both backend and frontend, building Angu
 
 ---
 
+Server is up and running in this URL : https://lexisnexissample-production.up.railway.app/api/hello
