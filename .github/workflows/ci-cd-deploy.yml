@@ -1,0 +1,121 @@
+name: CI / Build / Deploy to Railway
+
+on:
+  push:
+    branches: [ "main" ]  # triggers only on main branch
+
+env:
+  BACKEND_DIR: backend
+  FRONTEND_DIR: frontend/lexisnexis-front-end
+  RAILWAY_CLI_INSTALL: https://railway.app/install.sh
+
+jobs:
+  backend-tests:
+    name: Backend → JUnit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Cache Maven local repo
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Run Maven tests
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: mvn -B test
+
+  frontend-tests:
+    name: Frontend → Angular tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.FRONTEND_DIR }}/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles(env.FRONTEND_DIR + '/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install frontend dependencies
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm ci
+
+      - name: Run Angular unit tests (Headless)
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: npm test -- --watch=false --browsers=ChromeHeadless
+
+  build-and-deploy:
+    name: Build + Deploy
+    runs-on: ubuntu-latest
+    needs: [ backend-tests, frontend-tests ]
+    if: success()            # only runs if tests pass
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22 (for Angular build)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build Angular (production)
+        working-directory: ${{ env.FRONTEND_DIR }}
+        run: |
+          npm ci
+          npm run build -- --output-path=dist --base-href=/
+
+      - name: Copy Angular dist into Spring Boot static
+        run: |
+          echo "Clearing ${BACKEND_DIR}/src/main/resources/static ..."
+          rm -rf ${BACKEND_DIR}/src/main/resources/static/*
+          mkdir -p ${BACKEND_DIR}/src/main/resources/static
+          cp -R ${FRONTEND_DIR}/dist/* ${BACKEND_DIR}/src/main/resources/static/
+
+      - name: Set up JDK 17 (for Spring Boot build)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Cache Maven local repo
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Build Spring Boot JAR
+        working-directory: ${{ env.BACKEND_DIR }}
+        run: mvn -B -DskipTests package
+
+      - name: Install Railway CLI
+        run: curl -fsSL $RAILWAY_CLI_INSTALL | sh
+
+      - name: Login to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          railway login --token "$RAILWAY_TOKEN"
+
+      - name: Deploy to Railway
+        run: railway up --ci
